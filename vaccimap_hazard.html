@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VacciMap — 感染症ハザードマップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --text: #e8edf5;
+    --text-dim: #6b7fa3;
+    --accent: #38bdf8;
+    --risk-low: #22c55e;
+    --risk-moderate: #f59e0b;
+    --risk-high: #ef4444;
+    --risk-critical: #dc2626;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    grid-template-columns: 1fr 340px;
+    overflow: hidden;
+  }
+
+  /* ── ヘッダー ── */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 1000;
+  }
+
+  .logo {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--text-dim); font-weight: 400; }
+
+  .header-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.3);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .search-bar {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .search-bar input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: var(--accent); }
+  .search-bar input::placeholder { color: var(--text-dim); }
+
+  .search-btn {
+    background: var(--accent);
+    color: #0a0e1a;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .search-btn:hover { opacity: 0.85; }
+
+  /* ── 地図 ── */
+  #map {
+    grid-row: 2;
+    grid-column: 1;
+    background: #0d1220;
+  }
+
+  /* ── サイドパネル ── */
+  .panel {
+    grid-row: 2;
+    grid-column: 2;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .panel-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  /* エリア情報 */
+  .area-name {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .risk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .risk-pill.high {
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.3);
+  }
+  .risk-pill.moderate {
+    background: rgba(245,158,11,0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+  .risk-pill.low {
+    background: rgba(34,197,94,0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34,197,94,0.3);
+  }
+  .risk-pill.critical {
+    background: rgba(220,38,38,0.2);
+    color: #dc2626;
+    border: 1px solid rgba(220,38,38,0.4);
+  }
+
+  /* 疾患カード */
+  .disease-card {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .disease-card:hover { border-color: rgba(56,189,248,0.3); }
+  .disease-card:last-child { margin-bottom: 0; }
+
+  .disease-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .disease-name {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .disease-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .disease-count span {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .disease-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .disease-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.6s ease;
+  }
+
+  .trend {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .trend.up { color: #ef4444; }
+  .trend.down { color: #22c55e; }
+  .trend.flat { color: var(--text-dim); }
+
+  /* ニュースセクション */
+  .news-item {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--risk-high);
+  }
+
+  .news-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .news-text {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .news-source {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    margin-top: 6px;
+  }
+
+  /* 凡例 */
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* 地図スタイル上書き */
+  .leaflet-container { background: #0d1220 !important; }
+
+  .leaflet-tile-pane { filter: brightness(0.35) saturate(0.3) hue-rotate(200deg); }
+
+  .custom-tooltip {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    font-family: 'Noto Sans JP', sans-serif !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    padding: 6px 10px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  }
+
+  .highlight-marker {
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 10px rgba(56,189,248,0.8);
+  }
+
+  /* スクロールバー */
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Vacci<span>Map</span></div>
+  <div class="header-badge">● LIVE</div>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="郵便番号または住所を入力（例：176-0001）" />
+    <button class="search-btn" onclick="searchLocation()">検索</button>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<div class="panel">
+
+  <!-- エリア情報 -->
+  <div class="panel-section">
+    <div class="panel-label">選択エリア</div>
+    <div class="area-name" id="areaName">東京都 練馬区</div>
+    <div style="margin-top:6px">
+      <span class="risk-pill high" id="riskPill">
+        <span>●</span> 高リスク
+      </span>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:var(--text-dim); line-height:1.6" id="areaDesc">
+      インフルエンザ警報発令中。第6週定点報告数42.50人（警報基準30.0人超）。
+    </div>
+  </div>
+
+  <!-- 疾患データ -->
+  <div class="panel-section">
+    <div class="panel-label">感染症発生状況（2026年第6週）</div>
+    <div id="diseaseList">
+      <!-- JSで生成 -->
+    </div>
+  </div>
+
+  <!-- 速報テキスト -->
+  <div class="panel-section">
+    <div class="panel-label">📢 最新情報</div>
+
+    <div class="news-item">
+      <div class="news-date">2026-02-05 ｜ 東京都感染症情報センター</div>
+      <div class="news-text">
+        インフルエンザ：第6週（2月2日〜8日）の定点当たり患者報告数が<strong>42.50人</strong>で、再度警報基準（30.0人）を超えました。1999年以来初めて1シーズンで2度目の警報。B型が約90%を占めています。
+      </div>
+      <div class="news-source">↗ idsc.metro.tokyo.lg.jp</div>
+    </div>
+
+    <div class="news-item" style="border-left-color: var(--risk-moderate)">
+      <div class="news-date">2026-02-14 ｜ 東京都</div>
+      <div class="news-text">
+        RSV感染症：定点当たり<strong>5,785件</strong>（都全体）。高い水準で推移中。乳幼児・高齢者は特に注意が必要です。
+      </div>
+      <div class="news-source">↗ ny.gov / CDC</div>
+    </div>
+
+    <div class="news-item" style="border-left-color: var(--risk-low)">
+      <div class="news-date">2026-02-12 ｜ 厚生労働省</div>
+      <div class="news-text">
+        COVID-19：定点当たり<strong>0.71人</strong>（前週0.43人より微増）。5類移行後は低水準で推移。
+      </div>
+      <div class="news-source">↗ mhlw.go.jp</div>
+    </div>
+
+  </div>
+
+  <!-- 凡例 -->
+  <div class="panel-section">
+    <div class="panel-label">リスクレベル</div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#dc2626"></div>
+        <span>緊急 — 警報レベル超過・感染急増</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#ef4444"></div>
+        <span>高 — 注意報・定点超過</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#f59e0b"></div>
+        <span>中 — 流行期入り</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#22c55e"></div>
+        <span>低 — 通常水準</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── 感染症データ（デモ用 / 直近データ反映）──
+const DISEASE_DATA = {
+  "練馬区": {
+    risk: "high",
+    riskLabel: "高リスク",
+    desc: "インフルエンザ警報発令中。第6週定点報告数42.50人（警報基準30.0人超）。",
+    diseases: [
+      { name: "インフルエンザ", count: 42.50, unit: "定点/週", change: +2.5, max: 60, color: "#ef4444" },
+      { name: "RSV", count: 5785, unit: "件（都全体）", change: 0, max: 8000, color: "#f59e0b" },
+      { name: "COVID-19", count: 0.71, unit: "定点/週", change: +0.28, max: 5, color: "#f59e0b" },
+      { name: "マイコプラズマ肺炎", count: 12.3, unit: "定点/週", change: -1.2, max: 30, color: "#22c55e" },
+    ]
+  }
+};
+
+// 23区のリスクデータ（デモ）
+const WARD_RISK = {
+  "千代田区": "moderate", "中央区": "moderate", "港区": "low",
+  "新宿区": "high",     "文京区": "moderate", "台東区": "moderate",
+  "墨田区": "low",      "江東区": "low",      "品川区": "moderate",
+  "目黒区": "low",      "大田区": "moderate", "世田谷区": "high",
+  "渋谷区": "moderate", "中野区": "high",     "杉並区": "high",
+  "豊島区": "high",     "北区": "moderate",   "荒川区": "low",
+  "板橋区": "high",     "練馬区": "critical", "足立区": "moderate",
+  "葛飾区": "low",      "江戸川区": "low",
+};
+
+const RISK_COLOR = {
+  low:      { fill: "#22c55e", opacity: 0.25 },
+  moderate: { fill: "#f59e0b", opacity: 0.35 },
+  high:     { fill: "#ef4444", opacity: 0.5  },
+  critical: { fill: "#dc2626", opacity: 0.7  },
+};
+
+const RISK_LABEL = {
+  low: "低リスク", moderate: "中リスク", high: "高リスク", critical: "緊急"
+};
+
+// ── 地図初期化 ──
+const map = L.map('map', {
+  center: [35.69, 139.72],
+  zoom: 11,
+  zoomControl: false,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 18,
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+// ── GeoJSON読み込み（smartnews-smri/japan-topography）──
+const GEOJSON_URL =
+  "https://raw.githubusercontent.com/smartnews-smri/japan-topography/main/data/municipality/geojson/s0010/N03-21_13_210101.json";
+
+let geojsonLayer = null;
+let highlightLayer = null;
+
+function getRiskForWard(name) {
+  for (const [ward, risk] of Object.entries(WARD_RISK)) {
+    if (name.includes(ward)) return risk;
+  }
+  return "low";
+}
+
+function styleFeature(feature) {
+  const name = feature.properties.N03_004 || feature.properties.N03_003 || "";
+  const risk = getRiskForWard(name);
+  const c = RISK_COLOR[risk];
+  return {
+    fillColor: c.fill,
+    fillOpacity: c.opacity,
+    color: "rgba(255,255,255,0.15)",
+    weight: 1,
+  };
+}
+
+fetch(GEOJSON_URL)
+  .then(r => r.json())
+  .then(data => {
+    geojsonLayer = L.geoJSON(data, {
+      style: styleFeature,
+      onEachFeature: (feature, layer) => {
+        const name = feature.properties.N03_004 || feature.properties.N03_003 || "不明";
+        const risk = getRiskForWard(name);
+        layer.bindTooltip(
+          `<strong>${name}</strong><br>${RISK_LABEL[risk]}`,
+          { className: 'custom-tooltip', sticky: true }
+        );
+        layer.on('click', () => selectWard(name, layer, feature));
+      }
+    }).addTo(map);
+  })
+  .catch(err => {
+    console.warn("GeoJSON読み込み失敗（CORSの可能性）:", err);
+    // フォールバック: 練馬区の中心にマーカーだけ表示
+    showFallbackMarkers();
+  });
+
+function showFallbackMarkers() {
+  const wards = [
+    { name: "練馬区", lat: 35.7358, lng: 139.6516, risk: "critical" },
+    { name: "世田谷区", lat: 35.6464, lng: 139.6530, risk: "high" },
+    { name: "新宿区", lat: 35.6938, lng: 139.7034, risk: "high" },
+    { name: "杉並区", lat: 35.6995, lng: 139.6363, risk: "high" },
+    { name: "板橋区", lat: 35.7508, lng: 139.7093, risk: "high" },
+    { name: "中野区", lat: 35.7075, lng: 139.6636, risk: "high" },
+    { name: "豊島区", lat: 35.7281, lng: 139.7187, risk: "high" },
+    { name: "港区",   lat: 35.6581, lng: 139.7514, risk: "low" },
+    { name: "江東区", lat: 35.6722, lng: 139.8172, risk: "low" },
+  ];
+
+  wards.forEach(w => {
+    const c = RISK_COLOR[w.risk];
+    L.circleMarker([w.lat, w.lng], {
+      radius: 22,
+      fillColor: c.fill,
+      fillOpacity: c.opacity + 0.1,
+      color: c.fill,
+      weight: 2,
+    })
+    .bindTooltip(`<strong>${w.name}</strong><br>${RISK_LABEL[w.risk]}`,
+      { className: 'custom-tooltip' })
+    .addTo(map);
+  });
+}
+
+// ── 区選択 ──
+function selectWard(name, layer, feature) {
+  if (highlightLayer) map.removeLayer(highlightLayer);
+
+  highlightLayer = L.geoJSON(feature, {
+    style: {
+      fillColor: "transparent",
+      color: "#38bdf8",
+      weight: 2.5,
+      fillOpacity: 0,
+    }
+  }).addTo(map);
+
+  const risk = getRiskForWard(name);
+  updatePanel(name, risk);
+}
+
+function updatePanel(wardName, risk) {
+  document.getElementById('areaName').textContent = `東京都 ${wardName}`;
+
+  const pill = document.getElementById('riskPill');
+  pill.className = `risk-pill ${risk}`;
+  pill.innerHTML = `<span>●</span> ${RISK_LABEL[risk]}`;
+
+  document.getElementById('areaDesc').textContent =
+    risk === 'critical' ? "インフルエンザ警報発令中。定点報告数が警報基準を超過しています。" :
+    risk === 'high'     ? "複数の感染症が流行期に入っています。注意が必要です。" :
+    risk === 'moderate' ? "一部の感染症が増加傾向にあります。" :
+                          "現在、感染症の流行は通常水準です。";
+
+  renderDiseases(wardName);
+}
+
+function renderDiseases(wardName) {
+  const data = DISEASE_DATA["練馬区"]; // デモ: 全区同じデータ
+  const list = document.getElementById('diseaseList');
+  list.innerHTML = "";
+
+  data.diseases.forEach(d => {
+    const pct = Math.min(100, (d.count / d.max) * 100);
+    const trendClass = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'flat';
+    const trendIcon = d.change > 0 ? `↑ +${d.change}` : d.change < 0 ? `↓ ${d.change}` : '→ 横ばい';
+
+    list.innerHTML += `
+      <div class="disease-card">
+        <div class="disease-header">
+          <span class="disease-name">${d.name}</span>
+          <span class="disease-count">${d.count}<span> ${d.unit}</span></span>
+        </div>
+        <div class="trend ${trendClass}">${trendIcon}</div>
+        <div class="disease-bar">
+          <div class="disease-bar-fill" style="width:${pct}%; background:${d.color}"></div>
+        </div>
+      </div>`;
+  });
+}
+
+// ── 住所・郵便番号検索 ──
+async function searchLocation() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + " 東京")}&format=json&limit=1&accept-language=ja`
+    );
+    const results = await res.json();
+
+    if (results.length === 0) {
+      alert("場所が見つかりませんでした");
+      return;
+    }
+
+    const { lat, lon, display_name } = results[0];
+    map.flyTo([lat, lon], 13, { duration: 1.2 });
+
+    // マーカー追加
+    const icon = L.divIcon({
+      html: '<div class="highlight-marker"></div>',
+      iconSize: [16, 16],
+      className: '',
+    });
+    L.marker([lat, lon], { icon })
+      .addTo(map)
+      .bindPopup(`<strong>${display_name}</strong>`)
+      .openPopup();
+
+    // 区名を抽出してパネル更新
+    const wardMatch = display_name.match(/([^\s,]+区)/);
+    if (wardMatch) {
+      const ward = wardMatch[1];
+      const risk = getRiskForWard(ward);
+      updatePanel(ward, risk);
+    }
+
+  } catch(e) {
+    alert("検索中にエラーが発生しました");
+  }
+}
+
+// Enterキーで検索
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchLocation();
+});
+
+// 初期表示
+renderDiseases("練馬区");
+</script>
+</body>
+</html>

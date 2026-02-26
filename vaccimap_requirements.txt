@@ -1,0 +1,556 @@
+VacciMap
+感染症ハザードマップ＆子どもワクチン管理アプリ
+Infectious Disease Hazard Map & Child Vaccination Manager
+ドキュメントバージョン
+v1.0
+作成日
+2026-02-26
+対象ハッカソン
+TerraCode Convergence
+ステータス
+Draft
+フロントエンド
+AWS Amplify
+バックエンド
+API Gateway + Lambda + DynamoDB
+AI エンジン
+Claude API (web_search tool)
+認証
+Amazon Cognito
+
+1. プロジェクト概要
+
+VacciMapは、感染症アウトブレイクのリアルタイム監視と子どものワクチンスケジュール管理を組み合わせたWebアプリケーションです。Claude API（web_searchツール）を活用し、東京都・米国主要都市などのリアルタイム感染症データを取得・可視化します。
+
+1.1 ミッション
+親が子どもの健康を守るための意思決定を、AIとリアルタイムデータで支援する。
+1.2 主要機能
+	•	感染症ハザードマップ（区・市町村・州単位のリスク色分け）
+	•	郵便番号・住所検索による自エリアの感染症情報表示
+	•	Claude API web_search による直近1〜2週間のリアルタイムデータ取得
+	•	子どもプロフィール管理とワクチンスケジュール
+	•	AI チャット（個人化されたワクチン推奨）
+	•	UI 言語自動切り替え（ブラウザ設定に従い日本語/英語）
+1.3 技術スタック
+レイヤー
+サービス
+用途
+フロントエンド
+AWS Amplify + React
+ホスティング・CI/CD
+地図
+Leaflet + OpenStreetMap
+ハザードマップ表示
+API
+Amazon API Gateway
+RESTエンドポイント
+バックエンド
+AWS Lambda (Python)
+ビジネスロジック
+データベース
+Amazon DynamoDB
+キャッシュ・ユーザーデータ
+認証
+Amazon Cognito
+ユーザー認証・JWT
+AI エンジン
+Claude API (Sonnet)
+web_search + チャット
+データソース
+Claude web_search
+感染症リアルタイムデータ
+
+2. システムアーキテクチャ
+
+2.1 全体構成
+フロントエンド（Amplify）→ API Gateway → Lambda → DynamoDB の3層構成。感染症データ取得にはClaude API web_searchを使用し、DynamoDBにTTL付きでキャッシュ。
+2.2 データフロー
+	•	1. ユーザーがエリアを選択（地図クリックまたは住所検索）
+	•	2. フロントエンドが /outbreak/{locationKey} にGETリクエスト
+	•	3. LambdaがDynamoDBのキャッシュを確認（TTL: 6時間）
+	•	4. キャッシュミス時: Claude API web_searchで最新データを取得
+	•	5. 結果をDynamoDBに保存し、フロントエンドに返却
+	•	6. 地図のリスク色・サイドパネルのデータを更新
+2.3 Claude API web_search の活用
+Nova Web Grounding の代替として Claude API の web_search ツールを採用。東京都・練馬区レベルの感染症データも精度高く取得可能（実証済み）。
+
+比較項目
+Nova Web Grounding
+Claude web_search
+採用
+東京都データ精度
+❌ 取得不可
+✅ 取得可能
+Claude ✅
+練馬区レベル
+❌ 取得不可
+✅ 取得可能
+Claude ✅
+米国州レベル
+✅
+✅
+—
+1回あたりコスト
+~$0.0001
+~$0.03
+Claude
+キャッシュ効果
+大
+大
+TTL 6h
+
+3. データ設計
+
+3.1 outbreak_cache テーブル
+Partition Key
+locationKey (String) — 例: japan#tokyo#nerima
+Sort Key
+diseaseType (String) — 例: influenza, covid19
+Attributes
+caseCount, weeklyChange, reportDate, severity, citationUrls, ttl
+TTL
+6時間（21,600秒）
+
+3.2 vaccine_schedule_cache テーブル
+Partition Key
+locationKey (String)
+Sort Key
+vaccineId (String) — 例: bcg, dtap, mmr
+Attributes
+vaccineName, recommendedAgeMonths, doses, mandatory, subsidyAvailable, guidelines, citationUrls, ttl
+TTL
+30日（2,592,000秒）
+
+3.3 child_profiles テーブル
+Partition Key
+childId (String) — UUID
+Attributes
+parentId (Cognito sub), name, birthDate, gender, country, region, city, vaccinationRecords[]
+アクセス制御
+parentIdはCognito JWT subと照合
+
+3.4 clinic_cache テーブル
+Partition Key
+locationKey (String)
+Sort Key
+clinicId (String) — UUID
+Attributes
+clinicName, address, phone, hours, latitude, longitude, services, citationUrls, ttl
+TTL
+7日（604,800秒）
+
+4. API 設計
+
+4.1 エンドポイント一覧
+Method
+Path
+説明
+認証
+GET
+/outbreak/{locationKey}
+感染症アウトブレイクデータ取得
+不要（Public）
+GET
+/risk/{locationKey}
+AIリスクアセスメント取得
+不要（Public）
+GET
+/children
+子どもプロフィール一覧
+Cognito JWT
+POST
+/children
+子どもプロフィール作成
+Cognito JWT
+PUT
+/children/{childId}
+子どもプロフィール更新
+Cognito JWT
+DELETE
+/children/{childId}
+子どもプロフィール削除
+Cognito JWT
+GET
+/vaccines/{locationKey}
+ワクチンスケジュール取得
+Cognito JWT
+POST
+/chat
+AIチャット（ストリーミング）
+Cognito JWT
+GET
+/clinics/{locationKey}
+近隣クリニック情報取得
+不要（Public）
+
+5. 機能要件
+
+5.1 感染症ハザードマップ（Public）
+#
+要件名
+詳細
+優先度
+F01
+ハザードマップ表示
+Leaflet + GeoJSONで区・市町村・州単位に色分けしたリスクマップを表示
+Must
+F02
+リスクカラー
+Low(緑)・Moderate(黄)・High(赤)・Critical(深赤)の4段階で面塗り
+Must
+F03
+エリア選択
+地図上のエリアをクリックしてサイドパネルに詳細を表示
+Must
+F04
+住所・郵便番号検索
+入力した住所・郵便番号に地図をフライし該当エリアのデータを表示
+Must
+F05
+疾患フィルター
+インフルエンザ・COVID・RSV等の疾患別フィルタリング
+Should
+F06
+リアルタイム更新
+データ更新時に地図を2秒以内にリフレッシュ
+Should
+
+5.2 感染症データ取得（Claude web_search）
+#
+要件名
+詳細
+優先度
+F07
+Claude web_search連携
+Claude API (claude-sonnet-4-20250514) + web_search_20250305ツールで直近データを取得
+Must
+F08
+6時間キャッシュ
+DynamoDB TTL 6hでキャッシュ。キャッシュヒット時はClaude API未呼び出し
+Must
+F09
+日本・都道府県対応
+東京都・大阪府等の都道府県レベルデータ取得（実証済み）
+Must
+F10
+区市町村レベル対応
+練馬区等の区単位データ取得（実証済み）。取得不可時は上位レベルにフォールバック
+Should
+F11
+米国・州レベル対応
+CDC等からUSデータを取得
+Must
+F12
+対象疾患
+インフルエンザ・COVID-19・RSV・ノロウイルス・マイコプラズマ肺炎・百日咳・麻疹
+Must
+F13
+citationURL付与
+取得データにソースURLを付与して表示
+Must
+F14
+フォールバック
+取得失敗時は直近キャッシュを返し、取得失敗フラグを付与
+Must
+
+5.3 ユーザー認証（Cognito）
+#
+要件名
+詳細
+優先度
+F15
+メール認証登録
+Cognitoによるメール認証付き新規登録
+Must
+F16
+ログイン・セッション
+Cognito JWTによるセッション管理
+Must
+F17
+Public/Private分離
+マップ・ホーム画面はPublic。子どもプロフィール・チャットはPrivate
+Must
+F18
+パスワードリセット
+メール経由のパスワードリセット
+Should
+
+5.4 子どもプロフィール・ワクチン管理（Private）
+#
+要件名
+詳細
+優先度
+F19
+プロフィール作成
+名前・生年月日・性別・居住地（国・都道府県・市区町村）を登録
+Must
+F20
+ワクチンスケジュール自動生成
+居住地の公式スケジュールをClaude web_searchで取得し自動生成
+Must
+F21
+接種記録
+接種済みのワクチンをマーク。接種日を記録
+Must
+F22
+ステータス管理
+completed / upcoming(30日以内) / overdue(30日超過) / scheduled を自動計算
+Must
+F23
+カレンダービュー
+月次カレンダーでワクチンスケジュールを表示
+Should
+F24
+複数子ども対応
+複数の子どもプロフィールを管理
+Must
+
+5.5 AIチャット（Private）
+#
+要件名
+詳細
+優先度
+F25
+Claude APIチャット
+claude-sonnet-4-20250514によるストリーミングチャット
+Must
+F26
+コンテキスト付与
+子どもプロフィール＋現在のアウトブレイクデータをプロンプトに含める
+Must
+F27
+免責事項表示
+「医療アドバイスの代替ではない」旨の免責事項を常に表示
+Must
+F28
+セッション履歴
+会話履歴をセッション中保持
+Should
+F29
+多言語対応
+ブラウザ設定に従い日本語/英語で回答
+Must
+
+5.6 i18n / 多言語対応
+#
+要件名
+詳細
+優先度
+F30
+言語自動切り替え
+navigator.language に従い日本語/英語UIを自動切り替え
+Must
+F31
+日本語UI
+ラベル・メッセージ・エラー文の日本語対応
+Must
+F32
+英語UI
+ラベル・メッセージ・エラー文の英語対応
+Must
+F33
+手動切り替え
+ヘッダーのトグルで言語を手動切り替え可能
+Should
+F34
+日付フォーマット
+ja: YYYY年MM月DD日 / en: MMM DD, YYYY
+Must
+
+6. 非機能要件
+
+6.1 パフォーマンス
+#
+要件名
+詳細
+優先度
+N01
+ホーム画面ロード
+4G環境で2秒以内にレンダリング完了
+Must
+N02
+地図レンダリング
+マップタイルとマーカーを3秒以内に表示
+Must
+N03
+API応答時間
+DynamoDBキャッシュヒット時200ms以内
+Must
+N04
+チャット初回トークン
+Claude APIストリーミング初回トークンを500ms以内に返却
+Should
+N05
+ローディング表示
+データフェッチが500ms超の場合にインジケーター表示
+Must
+
+6.2 セキュリティ
+#
+要件名
+詳細
+優先度
+N06
+JWT検証
+Privateエンドポイントは全てCognito JWTを検証
+Must
+N07
+データ分離
+parentIdによるデータアクセス制御（他ユーザーのデータ参照不可）
+Must
+N08
+HTTPS
+全通信をHTTPS化
+Must
+N09
+APIキー管理
+Claude APIキーはLambda環境変数またはSecrets Managerで管理
+Must
+
+6.3 信頼性・エラーハンドリング
+#
+要件名
+詳細
+優先度
+N10
+Claude APIエラー
+失敗時はDynamoDBの直近キャッシュを返却し、取得失敗タイムスタンプを表示
+Must
+N11
+オフライン対応
+ネットワーク切断時にオフラインインジケーターを表示
+Should
+N12
+タイムアウト
+Claude API呼び出しは30秒でタイムアウト、フォールバックメッセージを返却
+Must
+N13
+削除確認
+子どもプロフィール削除時に確認ダイアログを表示
+Must
+
+7. UI/UX 設計
+
+7.1 デザインコンセプト
+ダークテーマ（#0a0e1a ベース）のメディカル・データビジュアライゼーション。DM Mono（等幅）＋ Noto Sans JP を組み合わせた情報密度の高いUI。
+7.2 画面構成
+画面
+認証
+主要コンポーネント
+ホーム
+Public
+リスクサマリー・アウトブレイクバナー・ログインCTA
+ハザードマップ
+Public
+Leafletマップ・サイドパネル・疾患フィルター・住所検索
+ダッシュボード
+Private
+子どもToDoカード・週次AIアドバイス
+ワクチン管理
+Private
+子どもプロフィール・スケジュール一覧・接種記録
+カレンダー
+Private
+月次カレンダービュー・子ども切り替え
+AIチャット
+Private
+ストリーミングチャット・免責事項
+設定
+Private
+プロフィール編集・言語設定・通知設定
+
+7.3 ハザードマップ実装詳細（実証済みデモより）
+	•	地図ライブラリ: Leaflet 1.9.4
+	•	タイル: OpenStreetMap（ダークフィルター適用）
+	•	GeoJSON: 都道府県・区市町村境界データ
+	•	カラースキーム: Low=#22c55e / Moderate=#f59e0b / High=#ef4444 / Critical=#dc2626
+	•	住所検索: Nominatim API（OpenStreetMap）
+	•	サイドパネル: エリア名・リスクピル・疾患カード（定点数・トレンドバー）・速報テキスト
+
+8. コスト見積もり
+
+8.1 ハッカソン期間（5日間）
+サービス
+単価
+想定呼び出し
+小計/日
+5日合計
+Claude API web_search
+$0.01/検索
+50回/日
+$0.50
+$2.50
+Claude API トークン
+$3/1M in
+50,000tok/日
+$0.15
+$0.75
+DynamoDB
+無料枠内
+—
+$0
+$0
+Lambda
+無料枠内
+—
+$0
+$0
+Cognito
+無料枠内
+—
+$0
+$0
+API Gateway
+無料枠内
+—
+$0
+$0
+Amplify
+無料枠内
+—
+$0
+$0
+合計
+
+
+~$0.65/日
+~$3.25
+※ DynamoDBキャッシュ（TTL 6時間）が有効に機能した場合の見積もり。Claude APIクレジットは$5〜$10を推奨。
+
+9. 開発スケジュール（ハッカソン向け）
+
+フェーズ
+期間
+タスク
+Phase 1
+Day 1
+AWS環境セットアップ（Amplify・Cognito・Lambda・DynamoDB）、Claude APIクレジット追加
+Phase 2
+Day 1-2
+バックエンドLambda実装（outbreak取得・キャッシュ・Claude web_search連携）
+Phase 3
+Day 2-3
+フロントエンド実装（ハザードマップ・住所検索・サイドパネル）+ Amplifyデプロイ
+Phase 4
+Day 3-4
+認証（Cognito）・子どもプロフィール・ワクチンスケジュール実装
+Phase 5
+Day 4
+AIチャット実装・i18n（日英切り替え）
+Phase 6
+Day 5
+バグ修正・デモ動画撮影・Devpost提出
+
+10. ハッカソン提出物チェックリスト
+
+TerraCode Convergence 提出要件
+
+	•	[ ] プロジェクト名・MVPの説明文（Devpost）
+	•	[ ] デモ動画（2〜3分、YouTube）
+	•	[ ] GitHubリポジトリ（Public）
+	•	[ ] ライブデモURL（Amplify）
+	•	[ ] 技術スタックの説明
+	•	[ ] チームメンバー全員のDevpostアカウント登録
+
+
+VacciMap Requirements Document v1.0  —  Generated 2026-02-26
