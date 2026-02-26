@@ -24,14 +24,14 @@ This implementation plan breaks down the VacciMap application into discrete codi
   - Create .gitignore for sensitive files (terraform.tfvars, .env, node_modules)
   - _Requirements: 17.1, 17.7_
 
-- [ ] 2. Create Terraform module structure
-  - [ ] 2.1 Create base Terraform directory structure
+- [x] 2. Create Terraform module structure
+  - [x] 2.1 Create base Terraform directory structure
     - Create terraform/modules/ directories for api-gateway, lambda, dynamodb, cognito, amplify
     - Create terraform/environments/production/ directory
     - Create backend.tf for state management
     - _Requirements: 17.1_
   
-  - [ ] 2.2 Implement DynamoDB Terraform modules
+  - [x] 2.2 Implement DynamoDB Terraform modules
     - Create dynamodb module with variables for table_name, hash_key, range_key, ttl configuration
     - Configure OutbreakCache table (locationKey + diseaseType keys, ttl enabled)
     - Configure VaccineScheduleCache table (locationKey + vaccineId keys, ttl enabled)
@@ -40,14 +40,14 @@ This implementation plan breaks down the VacciMap application into discrete codi
     - Set billing_mode to PAY_PER_REQUEST for free tier optimization
     - _Requirements: 17.4, 19.1, 19.2, 19.3, 19.4, 4.1, 4.2_
   
-  - [ ] 2.3 Implement Cognito Terraform module
+  - [x] 2.3 Implement Cognito Terraform module
     - Create cognito module with password policy configuration (min 12 chars, uppercase, lowercase, numbers)
     - Configure email verification as auto_verified_attributes
     - Set token validity (access_token: 60 min, id_token: 60 min, refresh_token: 30 days)
     - Configure MFA as optional
     - _Requirements: 17.5, 5.2, 5.4_
   
-  - [ ] 2.4 Implement Secrets Manager for Claude API key
+  - [x] 2.4 Implement Secrets Manager for Claude API key
     - Create aws_secretsmanager_secret resource for Claude API key
     - Create IAM policy for Lambda functions to access secret
     - Document manual step to set secret value via AWS Console or CLI
