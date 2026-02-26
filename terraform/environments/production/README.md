@@ -15,25 +15,36 @@ This directory contains the Terraform configuration for the VacciMap production 
 mise install
 ```
 
-2. Create `terraform.tfvars` file (gitignored):
-```hcl
-aws_region                  = "us-east-1"
-cognito_user_pool_name      = "vaccimap-users"
-claude_api_key_secret_name  = "vaccimap-claude-api-key"
+2. Create `terraform.tfvars` file from example:
+```bash
+cd terraform/environments/production
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your values
 ```
 
-3. Initialize Terraform:
+3. Configure AWS credentials:
 ```bash
+aws configure
+```
+
+4. Deploy infrastructure using the deployment script:
+```bash
+cd terraform/environments/production
+./deploy.sh
+```
+
+Or manually:
+
+```bash
+cd terraform/environments/production
+
+# Initialize Terraform
 terraform init
-```
 
-4. Review the plan:
-```bash
+# Review the plan
 terraform plan
-```
 
-5. Apply the configuration:
-```bash
+# Apply the configuration
 terraform apply
 ```
 

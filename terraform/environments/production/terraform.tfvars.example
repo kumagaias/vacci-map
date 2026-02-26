@@ -1,0 +1,8 @@
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Cognito Configuration
+cognito_user_pool_name = "vaccimap-users"
+
+# Secrets Manager Configuration
+claude_api_key_secret_name = "vaccimap-claude-api-key"

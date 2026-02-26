@@ -60,7 +60,7 @@ This implementation plan breaks down the VacciMap application into discrete codi
   - _Requirements: 17.2_
 
 
-- [ ] 4. Deploy initial infrastructure with Terraform
+- [x] 4. Deploy initial infrastructure with Terraform
   - Run terraform init in environments/production/
   - Create terraform.tfvars with required variables (gitignored)
   - Run terraform plan and review changes
