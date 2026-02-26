@@ -37,3 +37,28 @@ output "lambda_secrets_access_policy_arn" {
   description = "ARN of the IAM policy for Lambda secrets access"
   value       = aws_iam_policy.lambda_secrets_access.arn
 }
+
+output "ecr_outbreak_service_url" {
+  description = "URL of the outbreak service ECR repository"
+  value       = module.ecr_outbreak_service.repository_url
+}
+
+output "ecr_vaccine_service_url" {
+  description = "URL of the vaccine service ECR repository"
+  value       = module.ecr_vaccine_service.repository_url
+}
+
+output "ecr_child_service_url" {
+  description = "URL of the child service ECR repository"
+  value       = module.ecr_child_service.repository_url
+}
+
+output "ecr_chat_service_url" {
+  description = "URL of the chat service ECR repository"
+  value       = module.ecr_chat_service.repository_url
+}
+
+output "ecr_clinic_service_url" {
+  description = "URL of the clinic service ECR repository"
+  value       = module.ecr_clinic_service.repository_url
+}

@@ -53,7 +53,7 @@ This implementation plan breaks down the VacciMap application into discrete codi
     - Document manual step to set secret value via AWS Console or CLI
     - _Requirements: 14.2_
 
-- [ ] 3. Create ECR repositories for Lambda containers
+- [x] 3. Create ECR repositories for Lambda containers
   - Create ECR repositories for outbreak-service, vaccine-service, child-service, chat-service, clinic-service
   - Configure repository policies for Lambda access
   - Document Docker build and push commands

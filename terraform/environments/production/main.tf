@@ -129,3 +129,69 @@ resource "aws_iam_policy" "lambda_secrets_access" {
     ManagedBy   = "Terraform"
   }
 }
+
+# ECR Repositories for Lambda containers
+module "ecr_outbreak_service" {
+  source = "../../modules/ecr"
+
+  repository_name = "vaccimap-outbreak-service"
+
+  tags = {
+    Project     = "VacciMap"
+    Environment = "production"
+    ManagedBy   = "Terraform"
+    Service     = "outbreak-service"
+  }
+}
+
+module "ecr_vaccine_service" {
+  source = "../../modules/ecr"
+
+  repository_name = "vaccimap-vaccine-service"
+
+  tags = {
+    Project     = "VacciMap"
+    Environment = "production"
+    ManagedBy   = "Terraform"
+    Service     = "vaccine-service"
+  }
+}
+
+module "ecr_child_service" {
+  source = "../../modules/ecr"
+
+  repository_name = "vaccimap-child-service"
+
+  tags = {
+    Project     = "VacciMap"
+    Environment = "production"
+    ManagedBy   = "Terraform"
+    Service     = "child-service"
+  }
+}
+
+module "ecr_chat_service" {
+  source = "../../modules/ecr"
+
+  repository_name = "vaccimap-chat-service"
+
+  tags = {
+    Project     = "VacciMap"
+    Environment = "production"
+    ManagedBy   = "Terraform"
+    Service     = "chat-service"
+  }
+}
+
+module "ecr_clinic_service" {
+  source = "../../modules/ecr"
+
+  repository_name = "vaccimap-clinic-service"
+
+  tags = {
+    Project     = "VacciMap"
+    Environment = "production"
+    ManagedBy   = "Terraform"
+    Service     = "clinic-service"
+  }
+}
